@@ -15,10 +15,29 @@ from werkzeug.security import check_password_hash, generate_password_hash
 load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+
+
+def _clean_env(value):
+    """Strip whitespace and drop any non-ASCII byte.
+
+    Env vars pasted through a web dashboard can pick up invisible characters
+    (smart quotes, NBSPs, stray newlines) that are invalid in an HTTP header
+    and make `requests` blow up with a latin-1 UnicodeEncodeError. A Supabase
+    URL/JWT never legitimately contains non-ASCII characters, so it's safe to
+    just filter them out rather than fail.
+    """
+    if not value:
+        return None
+    cleaned = "".join(ch for ch in value if ord(ch) < 128).strip()
+    return cleaned or None
+
+
 # Optional: only the 계약 서류 업로드 기능 needs these. Read lazily (not at import
 # time) so a missing value can't take down login/contracts/dashboard for everyone.
-SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/") or None
-SUPABASE_SERVICE_KEY = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip() or None
+SUPABASE_URL = _clean_env(os.environ.get("SUPABASE_URL"))
+if SUPABASE_URL:
+    SUPABASE_URL = SUPABASE_URL.rstrip("/")
+SUPABASE_SERVICE_KEY = _clean_env(os.environ.get("SUPABASE_SERVICE_KEY"))
 STORAGE_BUCKET = "contract-files"
 
 STAGES = ["협상중", "계약완료", "진행중", "완료"]
