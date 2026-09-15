@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}거래처 관리{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>거래처 관리</h1>
+    <span class="page-sub">같은 거래처와 맺은 계약들을 모아봅니다</span>
+</div>
+
+<div class="table-card">
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>거래처</th>
+                    <th>계약 건수</th>
+                    <th>누적 계약금액</th>
+                    <th>최근 계약 시작일</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in clients %}
+                <tr>
+                    <td>{{ c.client }}</td>
+                    <td class="num">{{ c.cnt }}건</td>
+                    <td class="num">{{ "{:,.0f}".format(c.total) }}원</td>
+                    <td class="date-range">{{ c.latest }}</td>
+                    <td><a href="{{ url_for('contracts_list', client=c.client) }}">계약 보기</a></td>
+                </tr>
+                {% else %}
+                <tr><td colspan="5" class="empty">등록된 거래처가 없습니다.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

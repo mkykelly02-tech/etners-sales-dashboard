@@ -16,6 +16,9 @@
             <nav class="nav-links">
                 <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}">대시보드</a>
                 <a href="{{ url_for('contracts_list') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('contract') }}">계약 관리</a>
+                <a href="{{ url_for('documents') }}" class="{{ 'active' if request.endpoint == 'documents' }}">서류함</a>
+                <a href="{{ url_for('clients') }}" class="{{ 'active' if request.endpoint == 'clients' }}">거래처</a>
+                <a href="{{ url_for('reports') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('reports') }}">리포트</a>
                 {% if user.role == 'admin' %}
                 <a href="{{ url_for('admin_targets') }}" class="{{ 'active' if request.endpoint == 'admin_targets' }}">목표 설정</a>
                 <a href="{{ url_for('admin_users') }}" class="{{ 'active' if request.endpoint == 'admin_users' }}">사용자 관리</a>

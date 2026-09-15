@@ -1,8 +1,12 @@
+import base64
+import json
 import mimetypes
 import os
+import re
 import uuid
 from datetime import date
 from functools import wraps
+from io import BytesIO
 from urllib.parse import quote
 
 import psycopg2
@@ -10,6 +14,7 @@ import psycopg2.extras
 import requests
 from dotenv import load_dotenv
 from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
+from openpyxl import Workbook
 from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
@@ -39,6 +44,17 @@ if SUPABASE_URL:
     SUPABASE_URL = SUPABASE_URL.rstrip("/")
 SUPABASE_SERVICE_KEY = _clean_env(os.environ.get("SUPABASE_SERVICE_KEY"))
 STORAGE_BUCKET = "contract-files"
+
+# Optional: only the AI 문서대조 기능 needs this. Without it, uploads just skip
+# straight to match_status = '미확인' instead of failing.
+ANTHROPIC_API_KEY = _clean_env(os.environ.get("ANTHROPIC_API_KEY"))
+ANTHROPIC_MODEL = "claude-sonnet-5"
+EXTRACTABLE_MIME_TYPES = {
+    "application/pdf": "document",
+    "image/png": "image",
+    "image/jpeg": "image",
+    "image/jpg": "image",
+}
 
 STAGES = ["협상중", "계약완료", "진행중", "완료"]
 DOC_TYPES = ["계약서", "세금계산서", "기타"]
@@ -136,6 +152,12 @@ def init_db():
                 )
                 """
             )
+            # AI 문서대조 결과 (금액/기간을 문서에서 읽어 계약 정보와 비교)
+            cur.execute("ALTER TABLE contract_files ADD COLUMN IF NOT EXISTS extracted_amount NUMERIC(14,0)")
+            cur.execute("ALTER TABLE contract_files ADD COLUMN IF NOT EXISTS extracted_start_date DATE")
+            cur.execute("ALTER TABLE contract_files ADD COLUMN IF NOT EXISTS extracted_end_date DATE")
+            cur.execute("ALTER TABLE contract_files ADD COLUMN IF NOT EXISTS match_status TEXT")
+            cur.execute("ALTER TABLE contract_files ADD COLUMN IF NOT EXISTS match_notes TEXT")
     finally:
         conn.close()
 
@@ -180,6 +202,100 @@ def storage_delete(path):
     _require_storage_config()
     url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
     requests.delete(url, headers=_storage_headers())
+
+
+# ---------- AI 문서대조 (계약서/세금계산서 금액·기간 자동 인식) ----------
+
+def extract_document_fields(file_bytes, mime_type):
+    """Ask Claude to read a 계약서/세금계산서 and pull out amount + period.
+
+    Returns None when extraction wasn't even attempted (no API key, or a file
+    type vision can't read, e.g. .docx/.hwp) — that's different from having
+    tried and found nothing, which returns a dict with the fields left null.
+    """
+    if not ANTHROPIC_API_KEY:
+        return None
+    block_type = EXTRACTABLE_MIME_TYPES.get(mime_type)
+    if not block_type:
+        return None
+
+    content_block = {
+        "type": block_type,
+        "source": {
+            "type": "base64",
+            "media_type": mime_type,
+            "data": base64.b64encode(file_bytes).decode("ascii"),
+        },
+    }
+    prompt = (
+        "이 문서는 회사 계약서 또는 세금계산서입니다. 아래 JSON 형식으로만 답하세요 (다른 설명 없이):\n"
+        '{"amount": 숫자또는null, "start_date": "YYYY-MM-DD"또는null, '
+        '"end_date": "YYYY-MM-DD"또는null, "note": "한 줄 설명"}\n'
+        "amount는 부가세 포함 총 금액을 원화 숫자만으로 적으세요(콤마 없이). "
+        "계약기간이 명시되어 있지 않고 발행일/작성일만 있다면 start_date에 그 날짜를 넣고 "
+        "end_date는 null로 두세요. 찾을 수 없는 값은 null로 두세요."
+    )
+    try:
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "x-api-key": ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": ANTHROPIC_MODEL,
+                "max_tokens": 500,
+                "messages": [{"role": "user", "content": [content_block, {"type": "text", "text": prompt}]}],
+            },
+            timeout=45,
+        )
+        resp.raise_for_status()
+        text = resp.json()["content"][0]["text"]
+        match = re.search(r"\{.*\}", text, re.DOTALL)
+        data = json.loads(match.group(0)) if match else {}
+        return {
+            "amount": data.get("amount"),
+            "start_date": data.get("start_date"),
+            "end_date": data.get("end_date"),
+            "note": data.get("note"),
+        }
+    except Exception as exc:
+        app.logger.error("extract_document_fields failed: %s", exc)
+        return {"amount": None, "start_date": None, "end_date": None, "note": f"인식 실패: {exc}"}
+
+
+def compute_match_status(extracted, contract):
+    """Compare AI-extracted fields against the contract record.
+
+    Returns (match_status, match_notes). Deliberately conservative: only
+    flags a mismatch when something extracted actively contradicts the
+    contract, never when the document simply didn't state a field.
+    """
+    if extracted is None:
+        return "미확인", "ANTHROPIC_API_KEY가 설정되지 않아 자동 인식을 건너뛰었습니다."
+
+    notes = []
+    amount = extracted.get("amount")
+    if amount is not None:
+        try:
+            if round(float(amount)) != round(float(contract["amount"])):
+                notes.append(f"인식된 금액 {int(round(float(amount))):,}원 ≠ 계약금액 {int(contract['amount']):,}원")
+        except (TypeError, ValueError):
+            pass
+
+    contract_start = str(contract["start_date"])
+    contract_end = str(contract["end_date"])
+    for field, label in (("start_date", "인식된 날짜"), ("end_date", "인식된 종료일")):
+        value = extracted.get(field)
+        if value and not (contract_start <= value <= contract_end):
+            notes.append(f"{label} {value}가 계약기간({contract_start}~{contract_end}) 밖입니다")
+
+    if notes:
+        return "불일치 의심", " / ".join(notes)
+    if amount is None and not extracted.get("start_date") and not extracted.get("end_date"):
+        return "인식불가", extracted.get("note") or "문서에서 금액·기간을 찾지 못했습니다."
+    return "일치", extracted.get("note")
 
 
 # ---------- auth helpers ----------
@@ -412,28 +528,33 @@ def dashboard():
 @app.route("/contracts")
 @login_required
 def contracts_list():
+    client_filter = request.args.get("client", "")
+
+    conditions = []
+    params = []
+    if session["role"] != "admin":
+        conditions.append("c.owner_id = %s")
+        params.append(session["user_id"])
+    if client_filter:
+        conditions.append("c.client = %s")
+        params.append(client_filter)
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
     db = get_db()
     with db.cursor() as cur:
-        if session["role"] == "admin":
-            cur.execute(
-                """
-                SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
-                FROM contracts c JOIN users u ON u.id = c.owner_id
-                ORDER BY c.start_date DESC
-                """
-            )
-        else:
-            cur.execute(
-                """
-                SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
-                FROM contracts c JOIN users u ON u.id = c.owner_id
-                WHERE c.owner_id = %s
-                ORDER BY c.start_date DESC
-                """,
-                (session["user_id"],),
-            )
+        cur.execute(
+            f"""
+            SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
+            FROM contracts c JOIN users u ON u.id = c.owner_id
+            {where_sql}
+            ORDER BY c.start_date DESC
+            """,
+            params,
+        )
         contracts = cur.fetchall()
-    return render_template("contracts_list.html", contracts=contracts, user=current_user_dict())
+    return render_template(
+        "contracts_list.html", contracts=contracts, user=current_user_dict(), client_filter=client_filter
+    )
 
 
 def _contract_form_context(error=None, contract=None, files=None):
@@ -556,7 +677,7 @@ def contract_delete(contract_id):
 @app.route("/contracts/<int:contract_id>/files", methods=["POST"])
 @login_required
 def contract_file_upload(contract_id):
-    _get_owned_contract(contract_id)
+    contract = _get_owned_contract(contract_id)
 
     doc_type = request.form.get("doc_type", "").strip()
     upload = request.files.get("file")
@@ -566,6 +687,7 @@ def contract_file_upload(contract_id):
 
     original_name = upload.filename
     content_type = upload.mimetype or mimetypes.guess_type(original_name)[0] or "application/octet-stream"
+    file_bytes = upload.read()
     # Keep the real (possibly Korean) filename only in the DB for display; the storage
     # object key must stay ASCII-safe. secure_filename() drops non-ASCII text entirely
     # (and can even swallow the dot for an all-Korean name), so pull the extension from
@@ -574,16 +696,31 @@ def contract_file_upload(contract_id):
     safe_ext = "".join(ch for ch in raw_ext if ch.isalnum() or ch == ".")[:10]
     storage_path = f"{contract_id}/{uuid.uuid4().hex}{safe_ext}"
 
-    storage_upload(storage_path, upload.read(), content_type)
+    storage_upload(storage_path, file_bytes, content_type)
+
+    extracted = None
+    match_status, match_notes = None, None
+    if doc_type in ("계약서", "세금계산서"):
+        extracted = extract_document_fields(file_bytes, content_type)
+        match_status, match_notes = compute_match_status(extracted, contract)
 
     db = get_db()
     with db.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO contract_files (contract_id, doc_type, file_name, storage_path, mime_type, uploaded_by)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO contract_files (
+                contract_id, doc_type, file_name, storage_path, mime_type, uploaded_by,
+                extracted_amount, extracted_start_date, extracted_end_date, match_status, match_notes
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
-            (contract_id, doc_type, original_name, storage_path, content_type, session["user_id"]),
+            (
+                contract_id, doc_type, original_name, storage_path, content_type, session["user_id"],
+                extracted.get("amount") if extracted else None,
+                extracted.get("start_date") if extracted else None,
+                extracted.get("end_date") if extracted else None,
+                match_status, match_notes,
+            ),
         )
     db.commit()
     return redirect(url_for("contract_edit", contract_id=contract_id))
@@ -625,6 +762,161 @@ def contract_file_delete(contract_id, file_id):
     db.commit()
     storage_delete(file_row["storage_path"])
     return redirect(url_for("contract_edit", contract_id=contract_id))
+
+
+# ---------- 서류함 (전체 첨부 서류 모아보기) ----------
+
+@app.route("/documents")
+@login_required
+def documents():
+    doc_type = request.args.get("doc_type", "")
+    owner_id = request.args.get("owner_id", "")
+    date_from = request.args.get("date_from", "")
+    date_to = request.args.get("date_to", "")
+
+    conditions = []
+    params = []
+    if session["role"] != "admin":
+        conditions.append("c.owner_id = %s")
+        params.append(session["user_id"])
+    elif owner_id:
+        conditions.append("c.owner_id = %s")
+        params.append(owner_id)
+    if doc_type:
+        conditions.append("f.doc_type = %s")
+        params.append(doc_type)
+    if date_from:
+        conditions.append("c.start_date >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("c.start_date <= %s")
+        params.append(date_to)
+
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT f.*, c.title AS contract_title, c.client, c.start_date, c.end_date,
+                   u.display_name AS owner_name, u.department AS owner_department
+            FROM contract_files f
+            JOIN contracts c ON c.id = f.contract_id
+            JOIN users u ON u.id = c.owner_id
+            {where_sql}
+            ORDER BY f.uploaded_at DESC
+            """,
+            params,
+        )
+        files = cur.fetchall()
+
+        owners = []
+        if session["role"] == "admin":
+            cur.execute("SELECT id, display_name FROM users ORDER BY display_name")
+            owners = cur.fetchall()
+
+    return render_template(
+        "documents.html",
+        files=files,
+        doc_types=DOC_TYPES,
+        owners=owners,
+        filters={"doc_type": doc_type, "owner_id": owner_id, "date_from": date_from, "date_to": date_to},
+        user=current_user_dict(),
+    )
+
+
+# ---------- 거래처 관리 ----------
+
+@app.route("/clients")
+@login_required
+def clients():
+    db = get_db()
+    with db.cursor() as cur:
+        if session["role"] == "admin":
+            cur.execute(
+                """
+                SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
+                FROM contracts GROUP BY client ORDER BY total DESC
+                """
+            )
+        else:
+            cur.execute(
+                """
+                SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
+                FROM contracts WHERE owner_id = %s GROUP BY client ORDER BY total DESC
+                """,
+                (session["user_id"],),
+            )
+        client_rows = cur.fetchall()
+    return render_template("clients.html", clients=client_rows, user=current_user_dict())
+
+
+# ---------- 리포트 / 엑셀 내보내기 ----------
+
+@app.route("/reports")
+@login_required
+def reports():
+    return render_template("reports.html", user=current_user_dict(), today=date.today().isoformat())
+
+
+@app.route("/reports/export")
+@login_required
+def reports_export():
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+
+    conditions = []
+    params = []
+    if session["role"] != "admin":
+        conditions.append("c.owner_id = %s")
+        params.append(session["user_id"])
+    if start:
+        conditions.append("c.start_date >= %s")
+        params.append(start)
+    if end:
+        conditions.append("c.start_date <= %s")
+        params.append(end)
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT c.title, c.client, c.amount, c.start_date, c.end_date, c.stage,
+                   u.display_name AS owner_name, u.department AS owner_department
+            FROM contracts c JOIN users u ON u.id = c.owner_id
+            {where_sql}
+            ORDER BY c.start_date
+            """,
+            params,
+        )
+        rows = cur.fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "실적리포트"
+    headers = ["계약명", "거래처", "금액", "시작일", "종료일", "단계", "담당자", "부서"]
+    ws.append(headers)
+    for r in rows:
+        ws.append(
+            [
+                r["title"], r["client"], float(r["amount"]),
+                r["start_date"].isoformat(), r["end_date"].isoformat(),
+                r["stage"], r["owner_name"], r["owner_department"],
+            ]
+        )
+    widths = [24, 16, 14, 12, 12, 10, 12, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"실적리포트_{start or '전체'}_{end or '전체'}.xlsx"
+    return Response(
+        buf.read(),
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"},
+    )
 
 
 # ---------- admin: users & targets ----------

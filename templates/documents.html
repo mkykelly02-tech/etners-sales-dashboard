@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}서류함{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>서류함</h1>
+    <span class="page-sub">계약서 · 세금계산서 등 첨부 서류를 한 번에 모아봅니다</span>
+</div>
+
+<div class="filter-card">
+    <form method="get" class="filter-form">
+        <label>서류 종류
+            <select name="doc_type">
+                <option value="">전체</option>
+                {% for d in doc_types %}
+                <option value="{{ d }}" {{ 'selected' if filters.doc_type == d }}>{{ d }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% if user.role == 'admin' %}
+        <label>담당자
+            <select name="owner_id">
+                <option value="">전체</option>
+                {% for o in owners %}
+                <option value="{{ o.id }}" {{ 'selected' if filters.owner_id == o.id|string }}>{{ o.display_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        {% endif %}
+        <label>계약 시작일 (부터)
+            <input type="date" name="date_from" value="{{ filters.date_from }}">
+        </label>
+        <label>계약 시작일 (까지)
+            <input type="date" name="date_to" value="{{ filters.date_to }}">
+        </label>
+        <button type="submit" class="primary-btn">검색</button>
+        <a href="{{ url_for('documents') }}" class="secondary-btn">초기화</a>
+    </form>
+</div>
+
+<div class="table-card">
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>계약명</th>
+                    <th>거래처</th>
+                    <th>서류종류</th>
+                    <th>파일명</th>
+                    <th>대조결과</th>
+                    {% if user.role == 'admin' %}<th>담당자</th>{% endif %}
+                    <th>업로드일</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for f in files %}
+                <tr>
+                    <td><a href="{{ url_for('contract_edit', contract_id=f.contract_id) }}">{{ f.contract_title }}</a></td>
+                    <td>{{ f.client }}</td>
+                    <td><span class="file-doc-type">{{ f.doc_type }}</span></td>
+                    <td><a href="{{ url_for('contract_file_download', contract_id=f.contract_id, file_id=f.id) }}" class="file-name">{{ f.file_name }}</a></td>
+                    <td>
+                        {% if f.match_status %}
+                        <span class="match-badge match-{{ f.match_status|replace(' ', '_') }}" title="{{ f.match_notes or '' }}">{{ f.match_status }}</span>
+                        {% else %}
+                        <span class="match-badge">-</span>
+                        {% endif %}
+                    </td>
+                    {% if user.role == 'admin' %}<td>{{ f.owner_name }}</td>{% endif %}
+                    <td class="date-range">{{ f.uploaded_at.strftime('%Y-%m-%d') }}</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="7" class="empty">조건에 맞는 서류가 없습니다.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

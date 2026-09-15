@@ -6,6 +6,13 @@
     <a href="{{ url_for('contract_new') }}" class="primary-btn">+ 새 계약 등록</a>
 </div>
 
+{% if client_filter %}
+<div class="active-filter">
+    거래처 필터: <strong>{{ client_filter }}</strong>
+    <a href="{{ url_for('contracts_list') }}">✕ 초기화</a>
+</div>
+{% endif %}
+
 <div class="table-card">
     <div class="table-scroll">
         <table>

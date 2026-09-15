@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}리포트{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>리포트 / 내보내기</h1>
+    <span class="page-sub">기간을 선택해서 계약·실적 데이터를 엑셀 파일로 받습니다</span>
+</div>
+
+<div class="form-card">
+    <form method="get" action="{{ url_for('reports_export') }}" class="stack-form">
+        <div class="field-row">
+            <label>시작일
+                <input type="date" name="start">
+            </label>
+            <label>종료일
+                <input type="date" name="end" value="{{ today }}">
+            </label>
+        </div>
+        <p class="field-hint">비워두면 전체 기간(또는 종료일까지 전체)으로 내려받습니다. 계약 시작일 기준으로 필터링됩니다.</p>
+        <div class="form-actions">
+            <button type="submit" class="primary-btn">엑셀 다운로드</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

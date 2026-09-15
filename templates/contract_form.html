@@ -59,13 +59,21 @@
 
     <ul class="file-list">
         {% for f in files %}
-        <li>
-            <span class="file-doc-type">{{ f.doc_type }}</span>
-            <a href="{{ url_for('contract_file_download', contract_id=contract.id, file_id=f.id) }}" class="file-name">{{ f.file_name }}</a>
-            <span class="file-date">{{ f.uploaded_at.strftime('%Y-%m-%d') }}</span>
-            <form method="post" action="{{ url_for('contract_file_delete', contract_id=contract.id, file_id=f.id) }}" onsubmit="return confirm('이 파일을 삭제할까요?');">
-                <button type="submit" class="link-danger">삭제</button>
-            </form>
+        <li class="file-row">
+            <div class="file-row-main">
+                <span class="file-doc-type">{{ f.doc_type }}</span>
+                <a href="{{ url_for('contract_file_download', contract_id=contract.id, file_id=f.id) }}" class="file-name">{{ f.file_name }}</a>
+                {% if f.match_status %}
+                <span class="match-badge match-{{ f.match_status|replace(' ', '_') }}" title="{{ f.match_notes or '' }}">{{ f.match_status }}</span>
+                {% endif %}
+                <span class="file-date">{{ f.uploaded_at.strftime('%Y-%m-%d') }}</span>
+                <form method="post" action="{{ url_for('contract_file_delete', contract_id=contract.id, file_id=f.id) }}" onsubmit="return confirm('이 파일을 삭제할까요?');">
+                    <button type="submit" class="link-danger">삭제</button>
+                </form>
+            </div>
+            {% if f.match_notes and f.match_status == '불일치 의심' %}
+            <p class="file-match-note">⚠ {{ f.match_notes }}</p>
+            {% endif %}
         </li>
         {% else %}
         <li class="empty">아직 업로드된 서류가 없습니다.</li>
