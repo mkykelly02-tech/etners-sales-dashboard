@@ -838,6 +838,29 @@ def documents():
         )
         files = cur.fetchall()
 
+        # 같은 계약 건의 서류끼리 폴더처럼 묶어서 보여준다. 최근에 파일이 올라온
+        # 계약이 위로 오도록, uploaded_at DESC로 이미 정렬된 순서에서 계약별로
+        # 처음 등장하는 순서를 그대로 폴더 순서로 쓴다.
+        groups_by_contract = {}
+        doc_groups = []
+        for f in files:
+            key = f["contract_id"]
+            group = groups_by_contract.get(key)
+            if group is None:
+                group = {
+                    "contract_id": f["contract_id"],
+                    "contract_title": f["contract_title"],
+                    "client": f["client"],
+                    "start_date": f["start_date"],
+                    "end_date": f["end_date"],
+                    "owner_name": f["owner_name"],
+                    "owner_department": f["owner_department"],
+                    "files": [],
+                }
+                groups_by_contract[key] = group
+                doc_groups.append(group)
+            group["files"].append(f)
+
         owners = []
         if session["role"] == "admin":
             cur.execute("SELECT id, display_name FROM users ORDER BY display_name")
@@ -854,7 +877,7 @@ def documents():
 
     return render_template(
         "documents.html",
-        files=files,
+        doc_groups=doc_groups,
         doc_types=DOC_TYPES,
         owners=owners,
         upload_targets=upload_targets,
@@ -1059,7 +1082,10 @@ def admin_targets():
         cur.execute("SELECT * FROM targets ORDER BY year_month DESC, department NULLS FIRST")
         targets = cur.fetchall()
         cur.execute("SELECT DISTINCT department FROM users ORDER BY department")
-        departments = [r["department"] for r in cur.fetchall()]
+        existing_departments = [r["department"] for r in cur.fetchall()]
+        # 실제 가입자 부서와 별개로 항상 선택 가능해야 하는 목표 대상.
+        fixed_targets = ["GSP본부", "감동운영팀"]
+        departments = fixed_targets + [d for d in existing_departments if d not in fixed_targets]
     return render_template(
         "admin_targets.html", targets=targets, departments=departments, user=current_user_dict(), today=date.today().isoformat()
     )

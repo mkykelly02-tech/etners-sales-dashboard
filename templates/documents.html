@@ -67,25 +67,38 @@
     </form>
 </div>
 
+{% if not doc_groups %}
 <div class="table-card">
+    <p class="empty">조건에 맞는 서류가 없습니다.</p>
+</div>
+{% endif %}
+
+{% for g in doc_groups %}
+<div class="doc-group">
+    <div class="doc-group-head">
+        <div class="doc-group-title">
+            <span class="folder-icon">📁</span>
+            <a href="{{ url_for('contract_edit', contract_id=g.contract_id) }}">{{ g.contract_title }}</a>
+            <span class="doc-group-count">{{ g.files|length }}건</span>
+        </div>
+        <div class="doc-group-meta">
+            {{ g.client }} · {{ g.start_date }} ~ {{ g.end_date }}
+            {% if user.role == 'admin' %}· {{ g.owner_name }}({{ g.owner_department }}){% endif %}
+        </div>
+    </div>
     <div class="table-scroll">
         <table>
             <thead>
                 <tr>
-                    <th>계약명</th>
-                    <th>거래처</th>
                     <th>서류종류</th>
                     <th>파일명</th>
                     <th>대조결과</th>
-                    {% if user.role == 'admin' %}<th>담당자</th>{% endif %}
                     <th>업로드일</th>
                 </tr>
             </thead>
             <tbody>
-                {% for f in files %}
+                {% for f in g.files %}
                 <tr>
-                    <td><a href="{{ url_for('contract_edit', contract_id=f.contract_id) }}">{{ f.contract_title }}</a></td>
-                    <td>{{ f.client }}</td>
                     <td><span class="file-doc-type">{{ f.doc_type }}</span></td>
                     <td><a href="{{ url_for('contract_file_download', contract_id=f.contract_id, file_id=f.id) }}" class="file-name">{{ f.file_name }}</a></td>
                     <td>
@@ -95,14 +108,12 @@
                         <span class="match-badge">-</span>
                         {% endif %}
                     </td>
-                    {% if user.role == 'admin' %}<td>{{ f.owner_name }}</td>{% endif %}
                     <td class="date-range">{{ f.uploaded_at.strftime('%Y-%m-%d') }}</td>
                 </tr>
-                {% else %}
-                <tr><td colspan="7" class="empty">조건에 맞는 서류가 없습니다.</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 </div>
+{% endfor %}
 {% endblock %}
