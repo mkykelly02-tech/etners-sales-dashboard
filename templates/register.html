@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>회원가입 · ETNERS 실적관리</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-card">
+        <div class="auth-brand">ETNERS <span>실적관리 대시보드</span></div>
+        <h1>회원가입</h1>
+
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('register') }}" method="post" class="auth-form">
+            <label>아이디
+                <input type="text" name="username" autofocus required>
+            </label>
+            <label>이름
+                <input type="text" name="display_name" required>
+            </label>
+            <label>부서
+                <input type="text" name="department" placeholder="예: 영업1팀">
+            </label>
+            <label>비밀번호
+                <input type="password" name="password" required>
+            </label>
+            <button type="submit">회원가입</button>
+        </form>
+
+        <p class="auth-switch">이미 계정이 있으신가요? <a href="{{ url_for('login') }}">로그인</a></p>
+        <p class="auth-note">※ 가장 처음 가입하는 계정은 자동으로 관리자 권한을 갖습니다.</p>
+    </div>
+</body>
+</html>

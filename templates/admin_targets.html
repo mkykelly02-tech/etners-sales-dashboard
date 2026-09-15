@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}목표 설정{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>매출 목표 설정</h1>
+</div>
+
+<div class="form-card">
+    <form method="post" class="stack-form">
+        <label>연월
+            <input type="month" name="year_month" value="{{ today[:7] }}" required>
+        </label>
+        <label>대상
+            <select name="department">
+                <option value="">전사 목표</option>
+                {% for d in departments %}
+                <option value="{{ d }}">{{ d }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>목표 금액 (원)
+            <input type="number" name="target_amount" min="0" step="1" required>
+        </label>
+        <div class="form-actions">
+            <button type="submit" class="primary-btn">저장</button>
+        </div>
+    </form>
+</div>
+
+<div class="table-card">
+    <h2>설정된 목표</h2>
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>연월</th>
+                    <th>대상</th>
+                    <th>목표 금액</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for t in targets %}
+                <tr>
+                    <td>{{ t.year_month }}</td>
+                    <td>{{ t.department if t.department else '전사' }}</td>
+                    <td class="num">{{ "{:,.0f}".format(t.target_amount) }}원</td>
+                </tr>
+                {% else %}
+                <tr><td colspan="3" class="empty">설정된 목표가 없습니다.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

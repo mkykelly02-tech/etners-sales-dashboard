@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ '계약 수정' if contract else '계약 등록' }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ '계약 수정' if contract else '새 계약 등록' }}</h1>
+</div>
+
+<div class="form-card">
+    {% if error %}
+    <p class="error">{{ error }}</p>
+    {% endif %}
+
+    <form method="post" class="stack-form">
+        <label>계약명
+            <input type="text" name="title" value="{{ contract.title if contract else '' }}" required>
+        </label>
+        <label>거래처
+            <input type="text" name="client" value="{{ contract.client if contract else '' }}" required>
+        </label>
+        <label>계약금액 (원)
+            <input type="number" name="amount" min="0" step="1" value="{{ contract.amount if contract else '' }}" required>
+        </label>
+        <label>계약일
+            <input type="date" name="contract_date" value="{{ contract.contract_date.isoformat() if contract else today }}" required>
+        </label>
+        <label>진행 단계
+            <select name="stage">
+                {% for s in stages %}
+                <option value="{{ s }}" {{ 'selected' if contract and contract.stage == s else '' }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <div class="form-actions">
+            <a href="{{ url_for('contracts_list') }}" class="secondary-btn">취소</a>
+            <button type="submit" class="primary-btn">{{ '저장' if contract else '등록' }}</button>
+        </div>
+    </form>
+</div>
+{% endblock %}

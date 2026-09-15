@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block title %}대시보드{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ '전사 실적 대시보드' if user.role == 'admin' else '내 실적 대시보드' }}</h1>
+    <span class="page-sub">{{ this_month }} 기준</span>
+</div>
+
+<div class="kpi-row">
+    <div class="kpi-card">
+        <span class="kpi-label">{{ this_month }} 매출 합계</span>
+        <span class="kpi-value">{{ "{:,.0f}".format(month_total) }}원</span>
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">이번 달 목표</span>
+        <span class="kpi-value">
+            {% if target_amount %}{{ "{:,.0f}".format(target_amount) }}원{% else %}미설정{% endif %}
+        </span>
+    </div>
+    <div class="kpi-card achievement">
+        <span class="kpi-label">목표 달성률</span>
+        {% if achievement_pct is not none %}
+        <span class="kpi-value">{{ achievement_pct }}%</span>
+        <div class="progress-track">
+            <div class="progress-fill {{ 'over' if achievement_pct >= 100 }}" style="width: {{ [achievement_pct, 100] | min }}%"></div>
+        </div>
+        {% else %}
+        <span class="kpi-value muted">목표 미설정</span>
+        {% endif %}
+    </div>
+    <div class="kpi-card">
+        <span class="kpi-label">등록된 계약 수</span>
+        <span class="kpi-value">{{ stage_data | sum(attribute='cnt') }}건</span>
+    </div>
+</div>
+
+<div class="chart-grid">
+    <div class="chart-card">
+        <h2>월별 매출 추이 (최근 6개월)</h2>
+        <canvas id="trendChart"></canvas>
+    </div>
+    <div class="chart-card">
+        <h2>진행 단계별 현황</h2>
+        <canvas id="stageChart"></canvas>
+    </div>
+    {% if user.role == 'admin' %}
+    <div class="chart-card wide">
+        <h2>담당자별 실적 순위</h2>
+        <canvas id="rankingChart"></canvas>
+    </div>
+    {% endif %}
+</div>
+
+<div class="table-card">
+    <h2>최근 등록된 계약</h2>
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>계약명</th>
+                    <th>거래처</th>
+                    <th>금액</th>
+                    <th>계약일</th>
+                    <th>단계</th>
+                    {% if user.role == 'admin' %}<th>담당자</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in recent %}
+                <tr>
+                    <td>{{ c.title }}</td>
+                    <td>{{ c.client }}</td>
+                    <td class="num">{{ "{:,.0f}".format(c.amount) }}원</td>
+                    <td>{{ c.contract_date }}</td>
+                    <td><span class="stage-badge" data-stage="{{ c.stage }}">{{ c.stage }}</span></td>
+                    {% if user.role == 'admin' %}<td>{{ c.owner_name }}</td>{% endif %}
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="empty">등록된 계약이 없습니다.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+const monthlyTrend = {{ monthly_trend | tojson }};
+const stageLabels = {{ stages | tojson }};
+const stageData = {{ stage_data | tojson }};
+const ranking = {{ ranking | tojson }};
+
+new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+        labels: monthlyTrend.map(r => r.ym),
+        datasets: [{
+            label: '매출',
+            data: monthlyTrend.map(r => r.total),
+            borderColor: '#2563eb',
+            backgroundColor: 'rgba(37,99,235,0.12)',
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { ticks: { callback: v => v.toLocaleString() + '원' } } }
+    }
+});
+
+new Chart(document.getElementById('stageChart'), {
+    type: 'doughnut',
+    data: {
+        labels: stageLabels,
+        datasets: [{
+            data: stageData.map(s => s.cnt),
+            backgroundColor: ['#d97706', '#2563eb', '#7c3aed', '#16a34a'],
+        }]
+    },
+    options: { plugins: { legend: { position: 'bottom' } } }
+});
+
+{% if user.role == 'admin' %}
+new Chart(document.getElementById('rankingChart'), {
+    type: 'bar',
+    data: {
+        labels: ranking.map(r => r.display_name + ' (' + r.department + ')'),
+        datasets: [{
+            label: '누적 매출',
+            data: ranking.map(r => r.total),
+            backgroundColor: '#2563eb',
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: { x: { ticks: { callback: v => v.toLocaleString() + '원' } } }
+    }
+});
+{% endif %}
+</script>
+{% endblock %}

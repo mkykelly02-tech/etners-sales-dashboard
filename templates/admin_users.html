@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}사용자 관리{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>사용자 관리</h1>
+</div>
+
+<div class="table-card">
+    <div class="table-scroll">
+        <table>
+            <thead>
+                <tr>
+                    <th>아이디</th>
+                    <th>이름</th>
+                    <th>부서</th>
+                    <th>권한</th>
+                    <th>변경</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.username }}</td>
+                    <td>{{ u.display_name }}</td>
+                    <td>{{ u.department }}</td>
+                    <td><span class="role-badge role-{{ u.role }}">{{ '관리자' if u.role == 'admin' else '일반' }}</span></td>
+                    <td>
+                        <form action="{{ url_for('admin_user_role', user_id=u.id) }}" method="post" class="inline-form">
+                            <select name="role" onchange="this.form.submit()">
+                                <option value="user" {{ 'selected' if u.role == 'user' }}>일반</option>
+                                <option value="admin" {{ 'selected' if u.role == 'admin' }}>관리자</option>
+                            </select>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

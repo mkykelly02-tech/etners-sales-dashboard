@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="ko">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>로그인 · ETNERS 실적관리</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-body">
+    <div class="auth-card">
+        <div class="auth-brand">ETNERS <span>실적관리 대시보드</span></div>
+        <h1>로그인</h1>
+
+        {% if error %}
+        <p class="error">{{ error }}</p>
+        {% endif %}
+
+        <form action="{{ url_for('login') }}" method="post" class="auth-form">
+            <label>아이디
+                <input type="text" name="username" autofocus required>
+            </label>
+            <label>비밀번호
+                <input type="password" name="password" required>
+            </label>
+            <button type="submit">로그인</button>
+        </form>
+
+        <p class="auth-switch">계정이 없으신가요? <a href="{{ url_for('register') }}">회원가입</a></p>
+    </div>
+</body>
+</html>
