@@ -54,8 +54,15 @@
             {% endfor %}
         </select>
         <input type="file" name="file" required>
+        <div class="upload-manual-fields">
+            <input type="number" name="manual_amount" min="0" step="1" placeholder="문서상 금액(선택, 원)">
+            <input type="date" name="manual_start_date" title="문서상 시작일 (선택)">
+            <span class="tilde">~</span>
+            <input type="date" name="manual_end_date" title="문서상 종료일 (선택)">
+        </div>
         <button type="submit" class="secondary-btn">업로드</button>
     </form>
+    <p class="field-hint">계약서·세금계산서에 적힌 금액·기간을 위 칸에 직접 입력하면 계약 정보와 자동으로 비교합니다 (무료). 비워두면 AI 자동인식을 시도합니다(별도 설정 시에만 동작).</p>
 
     <ul class="file-list">
         {% for f in files %}

@@ -266,14 +266,14 @@ def extract_document_fields(file_bytes, mime_type):
 
 
 def compute_match_status(extracted, contract):
-    """Compare AI-extracted fields against the contract record.
+    """Compare extracted (manually entered or AI-read) fields against the contract.
 
     Returns (match_status, match_notes). Deliberately conservative: only
     flags a mismatch when something extracted actively contradicts the
     contract, never when the document simply didn't state a field.
     """
     if extracted is None:
-        return "미확인", "ANTHROPIC_API_KEY가 설정되지 않아 자동 인식을 건너뛰었습니다."
+        return "미확인", "문서상 금액·기간을 입력하지 않았고, AI 자동인식도 설정되어 있지 않습니다."
 
     notes = []
     amount = extracted.get("amount")
@@ -698,10 +698,25 @@ def contract_file_upload(contract_id):
 
     storage_upload(storage_path, file_bytes, content_type)
 
+    # 무료 경로: 사람이 문서에 적힌 금액/기간을 직접 입력하면 그 값으로 대조한다.
+    # 비워두고 AI(ANTHROPIC_API_KEY)가 설정되어 있으면 자동 인식을 시도하고,
+    # 그마저도 없으면 대조를 건너뛴다 — 어느 쪽도 비용이 강제되지 않는다.
+    manual_amount = request.form.get("manual_amount", "").strip()
+    manual_start = request.form.get("manual_start_date", "").strip()
+    manual_end = request.form.get("manual_end_date", "").strip()
+
     extracted = None
     match_status, match_notes = None, None
     if doc_type in ("계약서", "세금계산서"):
-        extracted = extract_document_fields(file_bytes, content_type)
+        if manual_amount or manual_start or manual_end:
+            extracted = {
+                "amount": manual_amount or None,
+                "start_date": manual_start or None,
+                "end_date": manual_end or None,
+                "note": "직접 입력",
+            }
+        else:
+            extracted = extract_document_fields(file_bytes, content_type)
         match_status, match_notes = compute_match_status(extracted, contract)
 
     db = get_db()

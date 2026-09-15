@@ -480,6 +480,31 @@ td.empty {
     padding: 6px 0;
 }
 
+.upload-manual-fields {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-basis: 100%;
+}
+
+.upload-manual-fields input {
+    padding: 8px 9px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    font-size: 13px;
+    font-family: inherit;
+}
+
+.upload-manual-fields input[type="number"] {
+    flex: 1;
+    min-width: 140px;
+}
+
+.upload-manual-fields .tilde {
+    color: var(--muted);
+    font-size: 13px;
+}
+
 .file-list {
     list-style: none;
     margin: 0;
