@@ -163,6 +163,8 @@ def storage_upload(path, file_bytes, content_type):
     _require_storage_config()
     url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
     resp = requests.post(url, headers=_storage_headers(content_type or "application/octet-stream"), data=file_bytes)
+    if not resp.ok:
+        app.logger.error("storage_upload failed: %s %s -> %s", resp.status_code, url, resp.text[:500])
     resp.raise_for_status()
 
 
