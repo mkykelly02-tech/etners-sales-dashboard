@@ -8,6 +8,9 @@
 
 <div class="filter-card">
     <form method="get" class="filter-form">
+        <label>계약명 검색
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="계약명으로 검색">
+        </label>
         <label>계약 시작일 (부터)
             <input type="date" name="start" value="{{ filters.start }}">
         </label>
@@ -26,6 +29,7 @@
     <input type="hidden" name="start" value="{{ filters.start }}">
     <input type="hidden" name="end" value="{{ filters.end }}">
     <input type="hidden" name="client" value="{{ filters.client }}">
+    <input type="hidden" name="q" value="{{ filters.q }}">
 
     <div class="table-card">
         <div class="page-head">

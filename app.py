@@ -529,6 +529,9 @@ def dashboard():
 @login_required
 def contracts_list():
     client_filter = request.args.get("client", "")
+    q = request.args.get("q", "").strip()
+    date_from = request.args.get("date_from", "")
+    date_to = request.args.get("date_to", "")
 
     conditions = []
     params = []
@@ -538,6 +541,15 @@ def contracts_list():
     if client_filter:
         conditions.append("c.client = %s")
         params.append(client_filter)
+    if q:
+        conditions.append("c.title ILIKE %s")
+        params.append(f"%{q}%")
+    if date_from:
+        conditions.append("c.start_date >= %s")
+        params.append(date_from)
+    if date_to:
+        conditions.append("c.start_date <= %s")
+        params.append(date_to)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()
@@ -553,7 +565,11 @@ def contracts_list():
         )
         contracts = cur.fetchall()
     return render_template(
-        "contracts_list.html", contracts=contracts, user=current_user_dict(), client_filter=client_filter
+        "contracts_list.html",
+        contracts=contracts,
+        user=current_user_dict(),
+        client_filter=client_filter,
+        filters={"q": q, "date_from": date_from, "date_to": date_to},
     )
 
 
@@ -897,14 +913,14 @@ def clients():
             cur.execute(
                 """
                 SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
-                FROM contracts GROUP BY client ORDER BY total DESC
+                FROM contracts GROUP BY client ORDER BY latest DESC
                 """
             )
         else:
             cur.execute(
                 """
                 SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
-                FROM contracts WHERE owner_id = %s GROUP BY client ORDER BY total DESC
+                FROM contracts WHERE owner_id = %s GROUP BY client ORDER BY latest DESC
                 """,
                 (session["user_id"],),
             )
@@ -920,6 +936,7 @@ def reports():
     start = request.args.get("start", "")
     end = request.args.get("end", "")
     client_filter = request.args.get("client", "").strip()
+    q = request.args.get("q", "").strip()
 
     conditions = []
     params = []
@@ -935,6 +952,9 @@ def reports():
     if client_filter:
         conditions.append("c.client = %s")
         params.append(client_filter)
+    if q:
+        conditions.append("c.title ILIKE %s")
+        params.append(f"%{q}%")
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()
@@ -953,7 +973,7 @@ def reports():
     return render_template(
         "reports.html",
         contracts=contracts,
-        filters={"start": start, "end": end, "client": client_filter},
+        filters={"start": start, "end": end, "client": client_filter, "q": q},
         user=current_user_dict(),
         today=date.today().isoformat(),
     )
@@ -966,6 +986,7 @@ def reports_export():
     start = request.args.get("start", "")
     end = request.args.get("end", "")
     client_filter = request.args.get("client", "").strip()
+    q = request.args.get("q", "").strip()
 
     conditions = []
     params = []
@@ -987,6 +1008,9 @@ def reports_export():
         if client_filter:
             conditions.append("c.client = %s")
             params.append(client_filter)
+        if q:
+            conditions.append("c.title ILIKE %s")
+            params.append(f"%{q}%")
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()

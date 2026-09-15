@@ -13,6 +13,23 @@
 </div>
 {% endif %}
 
+<div class="filter-card">
+    <form method="get" class="filter-form">
+        {% if client_filter %}<input type="hidden" name="client" value="{{ client_filter }}">{% endif %}
+        <label>계약명 검색
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="계약명으로 검색">
+        </label>
+        <label>계약 시작일 (부터)
+            <input type="date" name="date_from" value="{{ filters.date_from }}">
+        </label>
+        <label>계약 시작일 (까지)
+            <input type="date" name="date_to" value="{{ filters.date_to }}">
+        </label>
+        <button type="submit" class="primary-btn">검색</button>
+        <a href="{{ url_for('contracts_list') }}" class="secondary-btn">초기화</a>
+    </form>
+</div>
+
 <div class="table-card">
     <div class="table-scroll">
         <table>

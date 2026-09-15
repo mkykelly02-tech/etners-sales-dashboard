@@ -510,6 +510,27 @@ td.empty {
     font-size: 13px;
 }
 
+.contract-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 220px;
+}
+
+.contract-picker .contract-search {
+    padding: 7px 9px;
+    border: 1px solid var(--line);
+    border-radius: 8px 8px 0 0;
+    border-bottom: none;
+    font-size: 12.5px;
+    font-family: inherit;
+    background: var(--surface-2);
+}
+
+.contract-picker select {
+    border-radius: 0 0 8px 8px;
+}
+
 .file-list {
     list-style: none;
     margin: 0;

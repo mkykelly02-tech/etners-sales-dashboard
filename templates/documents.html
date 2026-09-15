@@ -10,12 +10,16 @@
     <h2 class="form-card-title">+ 서류 등록</h2>
     {% if upload_targets %}
     <form method="post" action="{{ url_for('document_upload') }}" enctype="multipart/form-data" class="upload-form">
-        <select name="contract_id" required>
-            <option value="" disabled selected>계약 선택</option>
-            {% for c in upload_targets %}
-            <option value="{{ c.id }}">{{ c.title }} ({{ c.client }})</option>
-            {% endfor %}
-        </select>
+        <div class="contract-picker">
+            <input type="text" class="contract-search" placeholder="🔍 계약명 검색" autocomplete="off"
+                   oninput="etnersFilterContracts(this)">
+            <select name="contract_id" required>
+                <option value="" disabled selected>계약 선택</option>
+                {% for c in upload_targets %}
+                <option value="{{ c.id }}">{{ c.title }} ({{ c.client }})</option>
+                {% endfor %}
+            </select>
+        </div>
         <select name="doc_type" required>
             {% for d in doc_types %}
             <option value="{{ d }}">{{ d }}</option>
@@ -116,4 +120,19 @@
     </div>
 </div>
 {% endfor %}
+
+<script>
+function etnersFilterContracts(input) {
+    var select = input.parentElement.querySelector('select[name="contract_id"]');
+    var q = input.value.trim().toLowerCase();
+    for (var i = 0; i < select.options.length; i++) {
+        var opt = select.options[i];
+        if (!opt.value) continue; // "계약 선택" placeholder always visible
+        opt.hidden = q.length > 0 && opt.textContent.toLowerCase().indexOf(q) === -1;
+    }
+    if (select.selectedOptions[0] && select.selectedOptions[0].hidden) {
+        select.value = "";
+    }
+}
+</script>
 {% endblock %}
