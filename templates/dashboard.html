@@ -97,8 +97,8 @@ new Chart(document.getElementById('trendChart'), {
         datasets: [{
             label: '매출',
             data: monthlyTrend.map(r => r.total),
-            borderColor: '#2563eb',
-            backgroundColor: 'rgba(37,99,235,0.12)',
+            borderColor: '#f26522',
+            backgroundColor: 'rgba(242,101,34,0.12)',
             fill: true,
             tension: 0.3,
         }]
@@ -115,7 +115,7 @@ new Chart(document.getElementById('stageChart'), {
         labels: stageLabels,
         datasets: [{
             data: stageData.map(s => s.cnt),
-            backgroundColor: ['#d97706', '#2563eb', '#7c3aed', '#16a34a'],
+            backgroundColor: ['#78716c', '#2563eb', '#7c3aed', '#16a34a'],
         }]
     },
     options: { plugins: { legend: { position: 'bottom' } } }
@@ -129,7 +129,7 @@ new Chart(document.getElementById('rankingChart'), {
         datasets: [{
             label: '누적 매출',
             data: ranking.map(r => r.total),
-            backgroundColor: '#2563eb',
+            backgroundColor: '#f26522',
         }]
     },
     options: {

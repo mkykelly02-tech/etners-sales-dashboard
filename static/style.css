@@ -3,14 +3,15 @@
 }
 
 :root {
-    --navy: #0f1b3d;
-    --navy-2: #16234f;
-    --accent: #2563eb;
-    --accent-soft: #e8effe;
-    --ink: #14161f;
-    --muted: #64748b;
-    --line: #e5e7eb;
-    --bg: #f4f6fb;
+    --charcoal: #262322;
+    --charcoal-2: #3a332c;
+    --accent: #f26522;
+    --accent-dark: #d9531b;
+    --accent-soft: #fdeae0;
+    --ink: #1c1917;
+    --muted: #6b6560;
+    --line: #e7e2dd;
+    --bg: #f7f5f2;
     --surface: #ffffff;
     --danger: #dc2626;
     --success: #16a34a;
@@ -36,7 +37,7 @@ a {
 }
 
 .topbar {
-    background: var(--navy);
+    background: var(--charcoal);
     color: #fff;
     display: flex;
     align-items: center;
@@ -47,14 +48,30 @@ a {
 }
 
 .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     font-weight: 700;
     font-size: 16px;
     white-space: nowrap;
 }
 
+.brand-logo-wrap {
+    background: #fff;
+    padding: 4px 10px;
+    border-radius: 7px;
+    display: inline-flex;
+    align-items: center;
+}
+
+.brand-logo {
+    height: 18px;
+    display: block;
+}
+
 .brand span {
     font-weight: 400;
-    color: #aab4d4;
+    color: #b9b2ab;
     margin-left: 6px;
     font-size: 13px;
 }
@@ -67,7 +84,7 @@ a {
 
 .nav-links a {
     text-decoration: none;
-    color: #c3cbe6;
+    color: #d6d0c9;
     padding: 8px 14px;
     border-radius: 8px;
     font-size: 14px;
@@ -99,12 +116,12 @@ a {
     padding: 3px 9px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.12);
-    color: #dbe3ff;
+    color: #e8e3dd;
 }
 
 .role-badge.role-admin {
-    background: #fbbf24;
-    color: #402c00;
+    background: #fff;
+    color: var(--charcoal);
 }
 
 .user-box form {
@@ -338,7 +355,7 @@ td.empty {
     color: var(--accent);
 }
 
-.stage-badge[data-stage="협상중"] { background: #fef3c7; color: #b45309; }
+.stage-badge[data-stage="협상중"] { background: #eeece9; color: #57534e; }
 .stage-badge[data-stage="계약완료"] { background: #dbeafe; color: #1d4ed8; }
 .stage-badge[data-stage="진행중"] { background: #ede9fe; color: #6d28d9; }
 .stage-badge[data-stage="완료"] { background: #dcfce7; color: #15803d; }
@@ -402,7 +419,7 @@ td.empty {
 }
 
 .primary-btn:hover {
-    background: #1d4ed8;
+    background: var(--accent-dark);
 }
 
 .secondary-btn {
@@ -427,7 +444,7 @@ td.empty {
     align-items: center;
     justify-content: center;
     min-height: 100vh;
-    background: linear-gradient(160deg, var(--navy) 0%, #1e2b5c 100%);
+    background: linear-gradient(160deg, var(--charcoal) 0%, var(--charcoal-2) 100%);
     padding: 20px;
 }
 
@@ -441,9 +458,17 @@ td.empty {
 }
 
 .auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-weight: 700;
-    color: var(--navy);
+    color: var(--charcoal);
     margin-bottom: 18px;
+}
+
+.auth-logo {
+    height: 22px;
+    display: block;
 }
 
 .auth-brand span {
@@ -491,7 +516,7 @@ td.empty {
 }
 
 .auth-form button:hover {
-    background: #1d4ed8;
+    background: var(--accent-dark);
 }
 
 .auth-switch {

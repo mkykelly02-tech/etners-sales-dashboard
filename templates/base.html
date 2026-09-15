@@ -9,7 +9,10 @@
 <body>
     <div class="app-shell">
         <header class="topbar">
-            <div class="brand">ETNERS <span>실적관리 대시보드</span></div>
+            <div class="brand">
+                <span class="brand-logo-wrap"><img src="{{ url_for('static', filename='logo.png') }}" alt="ETNERS" class="brand-logo"></span>
+                <span>실적관리 대시보드</span>
+            </div>
             <nav class="nav-links">
                 <a href="{{ url_for('dashboard') }}" class="{{ 'active' if request.endpoint == 'dashboard' }}">대시보드</a>
                 <a href="{{ url_for('contracts_list') }}" class="{{ 'active' if request.endpoint and request.endpoint.startswith('contract') }}">계약 관리</a>
