@@ -674,17 +674,13 @@ def contract_delete(contract_id):
 
 # ---------- contract files (수행실적 서류) ----------
 
-@app.route("/contracts/<int:contract_id>/files", methods=["POST"])
-@login_required
-def contract_file_upload(contract_id):
-    contract = _get_owned_contract(contract_id)
-
-    doc_type = request.form.get("doc_type", "").strip()
-    upload = request.files.get("file")
-
+def _save_contract_file(contract, doc_type, upload):
+    """Shared upload path for both the per-contract 서류 업로드 form and the
+    서류함 페이지's 서류 등록 form. Returns nothing; raises via abort() on bad input."""
     if doc_type not in DOC_TYPES or not upload or not upload.filename:
         abort(400)
 
+    contract_id = contract["id"]
     original_name = upload.filename
     content_type = upload.mimetype or mimetypes.guess_type(original_name)[0] or "application/octet-stream"
     file_bytes = upload.read()
@@ -738,7 +734,25 @@ def contract_file_upload(contract_id):
             ),
         )
     db.commit()
+
+
+@app.route("/contracts/<int:contract_id>/files", methods=["POST"])
+@login_required
+def contract_file_upload(contract_id):
+    contract = _get_owned_contract(contract_id)
+    _save_contract_file(contract, request.form.get("doc_type", "").strip(), request.files.get("file"))
     return redirect(url_for("contract_edit", contract_id=contract_id))
+
+
+@app.route("/documents/upload", methods=["POST"])
+@login_required
+def document_upload():
+    contract_id = request.form.get("contract_id", "")
+    if not contract_id.isdigit():
+        abort(400)
+    contract = _get_owned_contract(int(contract_id))
+    _save_contract_file(contract, request.form.get("doc_type", "").strip(), request.files.get("file"))
+    return redirect(url_for("documents"))
 
 
 def _get_owned_file(contract_id, file_id):
@@ -829,11 +843,21 @@ def documents():
             cur.execute("SELECT id, display_name FROM users ORDER BY display_name")
             owners = cur.fetchall()
 
+        if session["role"] == "admin":
+            cur.execute("SELECT id, title, client FROM contracts ORDER BY start_date DESC")
+        else:
+            cur.execute(
+                "SELECT id, title, client FROM contracts WHERE owner_id = %s ORDER BY start_date DESC",
+                (session["user_id"],),
+            )
+        upload_targets = cur.fetchall()
+
     return render_template(
         "documents.html",
         files=files,
         doc_types=DOC_TYPES,
         owners=owners,
+        upload_targets=upload_targets,
         filters={"doc_type": doc_type, "owner_id": owner_id, "date_from": date_from, "date_to": date_to},
         user=current_user_dict(),
     )
@@ -870,14 +894,9 @@ def clients():
 @app.route("/reports")
 @login_required
 def reports():
-    return render_template("reports.html", user=current_user_dict(), today=date.today().isoformat())
-
-
-@app.route("/reports/export")
-@login_required
-def reports_export():
     start = request.args.get("start", "")
     end = request.args.get("end", "")
+    client_filter = request.args.get("client", "").strip()
 
     conditions = []
     params = []
@@ -890,6 +909,61 @@ def reports_export():
     if end:
         conditions.append("c.start_date <= %s")
         params.append(end)
+    if client_filter:
+        conditions.append("c.client = %s")
+        params.append(client_filter)
+    where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(
+            f"""
+            SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
+            FROM contracts c JOIN users u ON u.id = c.owner_id
+            {where_sql}
+            ORDER BY c.start_date DESC
+            """,
+            params,
+        )
+        contracts = cur.fetchall()
+
+    return render_template(
+        "reports.html",
+        contracts=contracts,
+        filters={"start": start, "end": end, "client": client_filter},
+        user=current_user_dict(),
+        today=date.today().isoformat(),
+    )
+
+
+@app.route("/reports/export")
+@login_required
+def reports_export():
+    ids = [i for i in request.args.getlist("contract_ids") if i.isdigit()]
+    start = request.args.get("start", "")
+    end = request.args.get("end", "")
+    client_filter = request.args.get("client", "").strip()
+
+    conditions = []
+    params = []
+    if session["role"] != "admin":
+        conditions.append("c.owner_id = %s")
+        params.append(session["user_id"])
+
+    if ids:
+        # 체크된 계약이 있으면 그것만, 없으면(전부 해제 상태로 제출) 현재 조회 조건 전체로 내려받는다.
+        conditions.append("c.id = ANY(%s)")
+        params.append([int(i) for i in ids])
+    else:
+        if start:
+            conditions.append("c.start_date >= %s")
+            params.append(start)
+        if end:
+            conditions.append("c.start_date <= %s")
+            params.append(end)
+        if client_filter:
+            conditions.append("c.client = %s")
+            params.append(client_filter)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()

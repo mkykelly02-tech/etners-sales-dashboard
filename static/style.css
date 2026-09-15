@@ -315,6 +315,11 @@ td.empty {
     padding: 24px 0;
 }
 
+.check-col {
+    width: 32px;
+    text-align: center;
+}
+
 .row-actions {
     display: flex;
     gap: 10px;
