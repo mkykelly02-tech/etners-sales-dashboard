@@ -6,18 +6,21 @@
     <a href="{{ url_for('contract_new') }}" class="primary-btn">+ 새 계약 등록</a>
 </div>
 
-{% if client_filter %}
-<div class="active-filter">
-    거래처 필터: <strong>{{ client_filter }}</strong>
-    <a href="{{ url_for('contracts_list') }}">✕ 초기화</a>
-</div>
-{% endif %}
-
 <div class="filter-card">
     <form method="get" class="filter-form">
-        {% if client_filter %}<input type="hidden" name="client" value="{{ client_filter }}">{% endif %}
         <label>계약명 검색
             <input type="text" name="q" value="{{ filters.q }}" placeholder="계약명으로 검색">
+        </label>
+        <label>거래처 검색
+            <input type="text" name="client" value="{{ filters.client }}" placeholder="거래처로 검색">
+        </label>
+        <label>진행 단계
+            <select name="stage">
+                <option value="">전체</option>
+                {% for s in stages %}
+                <option value="{{ s }}" {{ 'selected' if filters.stage == s }}>{{ s }}</option>
+                {% endfor %}
+            </select>
         </label>
         <label>계약 시작일 (부터)
             <input type="date" name="date_from" value="{{ filters.date_from }}">

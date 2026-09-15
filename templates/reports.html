@@ -20,6 +20,14 @@
         <label>거래처
             <input type="text" name="client" value="{{ filters.client }}" placeholder="전체">
         </label>
+        <label>진행 단계
+            <select name="stage">
+                <option value="">전체</option>
+                {% for s in stages %}
+                <option value="{{ s }}" {{ 'selected' if filters.stage == s }}>{{ s }}</option>
+                {% endfor %}
+            </select>
+        </label>
         <button type="submit" class="primary-btn">조회</button>
         <a href="{{ url_for('reports') }}" class="secondary-btn">초기화</a>
     </form>
@@ -30,6 +38,7 @@
     <input type="hidden" name="end" value="{{ filters.end }}">
     <input type="hidden" name="client" value="{{ filters.client }}">
     <input type="hidden" name="q" value="{{ filters.q }}">
+    <input type="hidden" name="stage" value="{{ filters.stage }}">
 
     <div class="table-card">
         <div class="page-head">

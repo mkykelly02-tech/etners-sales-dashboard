@@ -528,10 +528,11 @@ def dashboard():
 @app.route("/contracts")
 @login_required
 def contracts_list():
-    client_filter = request.args.get("client", "")
+    client_filter = request.args.get("client", "").strip()
     q = request.args.get("q", "").strip()
     date_from = request.args.get("date_from", "")
     date_to = request.args.get("date_to", "")
+    stage_filter = request.args.get("stage", "").strip()
 
     conditions = []
     params = []
@@ -539,8 +540,8 @@ def contracts_list():
         conditions.append("c.owner_id = %s")
         params.append(session["user_id"])
     if client_filter:
-        conditions.append("c.client = %s")
-        params.append(client_filter)
+        conditions.append("c.client ILIKE %s")
+        params.append(f"%{client_filter}%")
     if q:
         conditions.append("c.title ILIKE %s")
         params.append(f"%{q}%")
@@ -550,6 +551,9 @@ def contracts_list():
     if date_to:
         conditions.append("c.start_date <= %s")
         params.append(date_to)
+    if stage_filter in STAGES:
+        conditions.append("c.stage = %s")
+        params.append(stage_filter)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()
@@ -568,8 +572,8 @@ def contracts_list():
         "contracts_list.html",
         contracts=contracts,
         user=current_user_dict(),
-        client_filter=client_filter,
-        filters={"q": q, "date_from": date_from, "date_to": date_to},
+        stages=STAGES,
+        filters={"q": q, "date_from": date_from, "date_to": date_to, "client": client_filter, "stage": stage_filter},
     )
 
 
@@ -937,6 +941,7 @@ def reports():
     end = request.args.get("end", "")
     client_filter = request.args.get("client", "").strip()
     q = request.args.get("q", "").strip()
+    stage_filter = request.args.get("stage", "").strip()
 
     conditions = []
     params = []
@@ -950,11 +955,14 @@ def reports():
         conditions.append("c.start_date <= %s")
         params.append(end)
     if client_filter:
-        conditions.append("c.client = %s")
-        params.append(client_filter)
+        conditions.append("c.client ILIKE %s")
+        params.append(f"%{client_filter}%")
     if q:
         conditions.append("c.title ILIKE %s")
         params.append(f"%{q}%")
+    if stage_filter in STAGES:
+        conditions.append("c.stage = %s")
+        params.append(stage_filter)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()
@@ -973,7 +981,8 @@ def reports():
     return render_template(
         "reports.html",
         contracts=contracts,
-        filters={"start": start, "end": end, "client": client_filter, "q": q},
+        stages=STAGES,
+        filters={"start": start, "end": end, "client": client_filter, "q": q, "stage": stage_filter},
         user=current_user_dict(),
         today=date.today().isoformat(),
     )
@@ -987,6 +996,7 @@ def reports_export():
     end = request.args.get("end", "")
     client_filter = request.args.get("client", "").strip()
     q = request.args.get("q", "").strip()
+    stage_filter = request.args.get("stage", "").strip()
 
     conditions = []
     params = []
@@ -1006,11 +1016,14 @@ def reports_export():
             conditions.append("c.start_date <= %s")
             params.append(end)
         if client_filter:
-            conditions.append("c.client = %s")
-            params.append(client_filter)
+            conditions.append("c.client ILIKE %s")
+            params.append(f"%{client_filter}%")
         if q:
             conditions.append("c.title ILIKE %s")
             params.append(f"%{q}%")
+        if stage_filter in STAGES:
+            conditions.append("c.stage = %s")
+            params.append(stage_filter)
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     db = get_db()
