@@ -17,8 +17,8 @@ load_dotenv()
 DATABASE_URL = os.environ["DATABASE_URL"]
 # Optional: only the 계약 서류 업로드 기능 needs these. Read lazily (not at import
 # time) so a missing value can't take down login/contracts/dashboard for everyone.
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
+SUPABASE_URL = (os.environ.get("SUPABASE_URL") or "").strip().rstrip("/") or None
+SUPABASE_SERVICE_KEY = (os.environ.get("SUPABASE_SERVICE_KEY") or "").strip() or None
 STORAGE_BUCKET = "contract-files"
 
 STAGES = ["협상중", "계약완료", "진행중", "완료"]
