@@ -15,15 +15,27 @@ from werkzeug.security import check_password_hash, generate_password_hash
 load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-SUPABASE_URL = os.environ["SUPABASE_URL"]
-SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+# Optional: only the 계약 서류 업로드 기능 needs these. Read lazily (not at import
+# time) so a missing value can't take down login/contracts/dashboard for everyone.
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY")
 STORAGE_BUCKET = "contract-files"
 
 STAGES = ["협상중", "계약완료", "진행중", "완료"]
 DOC_TYPES = ["계약서", "세금계산서", "기타"]
 
+
+class StorageNotConfigured(RuntimeError):
+    pass
+
+
 app = Flask(__name__)
 app.secret_key = os.environ["SECRET_KEY"]
+
+
+@app.errorhandler(StorageNotConfigured)
+def handle_storage_not_configured(exc):
+    return str(exc), 503
 
 
 def get_db():
@@ -111,6 +123,13 @@ def init_db():
 
 # ---------- Supabase Storage helpers ----------
 
+def _require_storage_config():
+    if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+        raise StorageNotConfigured(
+            "SUPABASE_URL / SUPABASE_SERVICE_KEY 환경변수가 설정되지 않아 서류 업로드 기능을 쓸 수 없습니다."
+        )
+
+
 def _storage_headers(content_type=None):
     headers = {
         "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
@@ -122,12 +141,14 @@ def _storage_headers(content_type=None):
 
 
 def storage_upload(path, file_bytes, content_type):
+    _require_storage_config()
     url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
     resp = requests.post(url, headers=_storage_headers(content_type or "application/octet-stream"), data=file_bytes)
     resp.raise_for_status()
 
 
 def storage_download(path):
+    _require_storage_config()
     url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
     resp = requests.get(url, headers=_storage_headers())
     resp.raise_for_status()
@@ -135,6 +156,7 @@ def storage_download(path):
 
 
 def storage_delete(path):
+    _require_storage_config()
     url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
     requests.delete(url, headers=_storage_headers())
 
