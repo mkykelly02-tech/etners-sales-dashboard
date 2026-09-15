@@ -20,9 +20,14 @@
         <label>계약금액 (원)
             <input type="number" name="amount" min="0" step="1" value="{{ contract.amount if contract else '' }}" required>
         </label>
-        <label>계약일
-            <input type="date" name="contract_date" value="{{ contract.contract_date.isoformat() if contract else today }}" required>
-        </label>
+        <div class="field-row">
+            <label>계약 시작일
+                <input type="date" name="start_date" value="{{ contract.start_date.isoformat() if contract else today }}" required>
+            </label>
+            <label>계약 종료일
+                <input type="date" name="end_date" value="{{ contract.end_date.isoformat() if contract else today }}" required>
+            </label>
+        </div>
         <label>진행 단계
             <select name="stage">
                 {% for s in stages %}
@@ -36,4 +41,36 @@
         </div>
     </form>
 </div>
+
+{% if contract %}
+<div class="form-card">
+    <h2 class="form-card-title">수행실적 서류</h2>
+    <p class="field-hint">계약서, 세금계산서 등을 올려두면 이 계약 건 아래에 자동으로 모아집니다. 나중에 수행실적증명서를 만들 때 여기서 모아 내려받으시면 됩니다.</p>
+
+    <form method="post" action="{{ url_for('contract_file_upload', contract_id=contract.id) }}" enctype="multipart/form-data" class="upload-form">
+        <select name="doc_type" required>
+            {% for d in doc_types %}
+            <option value="{{ d }}">{{ d }}</option>
+            {% endfor %}
+        </select>
+        <input type="file" name="file" required>
+        <button type="submit" class="secondary-btn">업로드</button>
+    </form>
+
+    <ul class="file-list">
+        {% for f in files %}
+        <li>
+            <span class="file-doc-type">{{ f.doc_type }}</span>
+            <a href="{{ url_for('contract_file_download', contract_id=contract.id, file_id=f.id) }}" class="file-name">{{ f.file_name }}</a>
+            <span class="file-date">{{ f.uploaded_at.strftime('%Y-%m-%d') }}</span>
+            <form method="post" action="{{ url_for('contract_file_delete', contract_id=contract.id, file_id=f.id) }}" onsubmit="return confirm('이 파일을 삭제할까요?');">
+                <button type="submit" class="link-danger">삭제</button>
+            </form>
+        </li>
+        {% else %}
+        <li class="empty">아직 업로드된 서류가 없습니다.</li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
 {% endblock %}

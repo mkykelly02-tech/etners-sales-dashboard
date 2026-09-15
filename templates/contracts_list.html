@@ -14,7 +14,7 @@
                     <th>계약명</th>
                     <th>거래처</th>
                     <th>금액</th>
-                    <th>계약일</th>
+                    <th>계약기간</th>
                     <th>단계</th>
                     {% if user.role == 'admin' %}<th>담당자</th><th>부서</th>{% endif %}
                     <th></th>
@@ -26,7 +26,7 @@
                     <td>{{ c.title }}</td>
                     <td>{{ c.client }}</td>
                     <td class="num">{{ "{:,.0f}".format(c.amount) }}원</td>
-                    <td>{{ c.contract_date }}</td>
+                    <td class="date-range">{{ c.start_date }} ~ {{ c.end_date }}</td>
                     <td><span class="stage-badge" data-stage="{{ c.stage }}">{{ c.stage }}</span></td>
                     {% if user.role == 'admin' %}
                     <td>{{ c.owner_name }}</td>

@@ -1,17 +1,26 @@
+import mimetypes
 import os
+import uuid
 from datetime import date
 from functools import wraps
+from urllib.parse import quote
 
 import psycopg2
 import psycopg2.extras
+import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, g, redirect, render_template, request, session, url_for
+from flask import Flask, Response, abort, g, redirect, render_template, request, session, url_for
 from werkzeug.security import check_password_hash, generate_password_hash
 
 load_dotenv()
 
 DATABASE_URL = os.environ["DATABASE_URL"]
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_SERVICE_KEY = os.environ["SUPABASE_SERVICE_KEY"]
+STORAGE_BUCKET = "contract-files"
+
 STAGES = ["협상중", "계약완료", "진행중", "완료"]
+DOC_TYPES = ["계약서", "세금계산서", "기타"]
 
 app = Flask(__name__)
 app.secret_key = os.environ["SECRET_KEY"]
@@ -54,7 +63,8 @@ def init_db():
                     title TEXT NOT NULL,
                     client TEXT NOT NULL,
                     amount NUMERIC(14,0) NOT NULL,
-                    contract_date DATE NOT NULL,
+                    start_date DATE NOT NULL,
+                    end_date DATE NOT NULL,
                     stage TEXT NOT NULL DEFAULT '협상중' CHECK (stage IN ('협상중','계약완료','진행중','완료')),
                     owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
                     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -62,6 +72,14 @@ def init_db():
                 )
                 """
             )
+            # migrate older schema: contract_date -> start_date, add end_date
+            cur.execute("SELECT column_name FROM information_schema.columns WHERE table_name = 'contracts'")
+            cols = {row[0] for row in cur.fetchall()}
+            if "contract_date" in cols and "start_date" not in cols:
+                cur.execute("ALTER TABLE contracts RENAME COLUMN contract_date TO start_date")
+            if "end_date" not in cols:
+                cur.execute("ALTER TABLE contracts ADD COLUMN end_date DATE NOT NULL DEFAULT CURRENT_DATE")
+
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS targets (
@@ -73,8 +91,52 @@ def init_db():
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS contract_files (
+                    id SERIAL PRIMARY KEY,
+                    contract_id INTEGER NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+                    doc_type TEXT NOT NULL CHECK (doc_type IN ('계약서','세금계산서','기타')),
+                    file_name TEXT NOT NULL,
+                    storage_path TEXT NOT NULL,
+                    mime_type TEXT,
+                    uploaded_by INTEGER REFERENCES users(id),
+                    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                )
+                """
+            )
     finally:
         conn.close()
+
+
+# ---------- Supabase Storage helpers ----------
+
+def _storage_headers(content_type=None):
+    headers = {
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "apikey": SUPABASE_SERVICE_KEY,
+    }
+    if content_type:
+        headers["Content-Type"] = content_type
+    return headers
+
+
+def storage_upload(path, file_bytes, content_type):
+    url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
+    resp = requests.post(url, headers=_storage_headers(content_type or "application/octet-stream"), data=file_bytes)
+    resp.raise_for_status()
+
+
+def storage_download(path):
+    url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
+    resp = requests.get(url, headers=_storage_headers())
+    resp.raise_for_status()
+    return resp.content
+
+
+def storage_delete(path):
+    url = f"{SUPABASE_URL}/storage/v1/object/{STORAGE_BUCKET}/{path}"
+    requests.delete(url, headers=_storage_headers())
 
 
 # ---------- auth helpers ----------
@@ -197,9 +259,9 @@ def dashboard():
             # company-wide monthly trend (last 6 months)
             cur.execute(
                 """
-                SELECT to_char(contract_date, 'YYYY-MM') AS ym, SUM(amount)::float AS total
+                SELECT to_char(start_date, 'YYYY-MM') AS ym, SUM(amount)::float AS total
                 FROM contracts
-                WHERE contract_date >= (CURRENT_DATE - INTERVAL '6 months')
+                WHERE start_date >= (CURRENT_DATE - INTERVAL '6 months')
                 GROUP BY ym ORDER BY ym
                 """
             )
@@ -222,7 +284,7 @@ def dashboard():
             stage_rows = cur.fetchall()
 
             cur.execute(
-                "SELECT COALESCE(SUM(amount), 0)::float AS total FROM contracts WHERE to_char(contract_date, 'YYYY-MM') = %s",
+                "SELECT COALESCE(SUM(amount), 0)::float AS total FROM contracts WHERE to_char(start_date, 'YYYY-MM') = %s",
                 (this_month,),
             )
             month_total = cur.fetchone()["total"]
@@ -245,9 +307,9 @@ def dashboard():
         else:
             cur.execute(
                 """
-                SELECT to_char(contract_date, 'YYYY-MM') AS ym, SUM(amount)::float AS total
+                SELECT to_char(start_date, 'YYYY-MM') AS ym, SUM(amount)::float AS total
                 FROM contracts
-                WHERE owner_id = %s AND contract_date >= (CURRENT_DATE - INTERVAL '6 months')
+                WHERE owner_id = %s AND start_date >= (CURRENT_DATE - INTERVAL '6 months')
                 GROUP BY ym ORDER BY ym
                 """,
                 (session["user_id"],),
@@ -262,7 +324,7 @@ def dashboard():
             stage_rows = cur.fetchall()
 
             cur.execute(
-                "SELECT COALESCE(SUM(amount), 0)::float AS total FROM contracts WHERE owner_id = %s AND to_char(contract_date, 'YYYY-MM') = %s",
+                "SELECT COALESCE(SUM(amount), 0)::float AS total FROM contracts WHERE owner_id = %s AND to_char(start_date, 'YYYY-MM') = %s",
                 (session["user_id"], this_month),
             )
             month_total = cur.fetchone()["total"]
@@ -314,7 +376,7 @@ def contracts_list():
                 """
                 SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
                 FROM contracts c JOIN users u ON u.id = c.owner_id
-                ORDER BY c.contract_date DESC
+                ORDER BY c.start_date DESC
                 """
             )
         else:
@@ -323,7 +385,7 @@ def contracts_list():
                 SELECT c.*, u.display_name AS owner_name, u.department AS owner_department
                 FROM contracts c JOIN users u ON u.id = c.owner_id
                 WHERE c.owner_id = %s
-                ORDER BY c.contract_date DESC
+                ORDER BY c.start_date DESC
                 """,
                 (session["user_id"],),
             )
@@ -331,12 +393,14 @@ def contracts_list():
     return render_template("contracts_list.html", contracts=contracts, user=current_user_dict())
 
 
-def _contract_form_context(error=None, contract=None):
+def _contract_form_context(error=None, contract=None, files=None):
     return {
         "user": current_user_dict(),
         "stages": STAGES,
+        "doc_types": DOC_TYPES,
         "error": error,
         "contract": contract,
+        "files": files or [],
         "today": date.today().isoformat(),
     }
 
@@ -350,23 +414,27 @@ def contract_new():
     title = request.form.get("title", "").strip()
     client = request.form.get("client", "").strip()
     amount = request.form.get("amount", "").strip()
-    contract_date = request.form.get("contract_date", "").strip()
+    start_date = request.form.get("start_date", "").strip()
+    end_date = request.form.get("end_date", "").strip()
     stage = request.form.get("stage", STAGES[0])
 
-    if not title or not client or not amount or not contract_date:
+    if not title or not client or not amount or not start_date or not end_date:
         return render_template("contract_form.html", **_contract_form_context(error="필수 항목을 모두 입력하세요."))
+    if end_date < start_date:
+        return render_template("contract_form.html", **_contract_form_context(error="계약 종료일은 시작일보다 빠를 수 없습니다."))
 
     db = get_db()
     with db.cursor() as cur:
         cur.execute(
             """
-            INSERT INTO contracts (title, client, amount, contract_date, stage, owner_id)
-            VALUES (%s, %s, %s, %s, %s, %s)
+            INSERT INTO contracts (title, client, amount, start_date, end_date, stage, owner_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
             """,
-            (title, client, amount, contract_date, stage, session["user_id"]),
+            (title, client, amount, start_date, end_date, stage, session["user_id"]),
         )
+        new_id = cur.fetchone()["id"]
     db.commit()
-    return redirect(url_for("contracts_list"))
+    return redirect(url_for("contract_edit", contract_id=new_id))
 
 
 def _get_owned_contract(contract_id):
@@ -387,27 +455,39 @@ def contract_edit(contract_id):
     contract = _get_owned_contract(contract_id)
 
     if request.method == "GET":
-        return render_template("contract_form.html", **_contract_form_context(contract=contract))
+        db = get_db()
+        with db.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM contract_files WHERE contract_id = %s ORDER BY uploaded_at DESC", (contract_id,)
+            )
+            files = cur.fetchall()
+        return render_template("contract_form.html", **_contract_form_context(contract=contract, files=files))
 
     title = request.form.get("title", "").strip()
     client = request.form.get("client", "").strip()
     amount = request.form.get("amount", "").strip()
-    contract_date = request.form.get("contract_date", "").strip()
+    start_date = request.form.get("start_date", "").strip()
+    end_date = request.form.get("end_date", "").strip()
     stage = request.form.get("stage", STAGES[0])
 
-    if not title or not client or not amount or not contract_date:
+    if not title or not client or not amount or not start_date or not end_date:
         return render_template(
             "contract_form.html", **_contract_form_context(error="필수 항목을 모두 입력하세요.", contract=contract)
+        )
+    if end_date < start_date:
+        return render_template(
+            "contract_form.html",
+            **_contract_form_context(error="계약 종료일은 시작일보다 빠를 수 없습니다.", contract=contract),
         )
 
     db = get_db()
     with db.cursor() as cur:
         cur.execute(
             """
-            UPDATE contracts SET title=%s, client=%s, amount=%s, contract_date=%s, stage=%s, updated_at=now()
+            UPDATE contracts SET title=%s, client=%s, amount=%s, start_date=%s, end_date=%s, stage=%s, updated_at=now()
             WHERE id = %s
             """,
-            (title, client, amount, contract_date, stage, contract_id),
+            (title, client, amount, start_date, end_date, stage, contract_id),
         )
     db.commit()
     return redirect(url_for("contracts_list"))
@@ -416,12 +496,92 @@ def contract_edit(contract_id):
 @app.route("/contracts/<int:contract_id>/delete", methods=["POST"])
 @login_required
 def contract_delete(contract_id):
-    _get_owned_contract(contract_id)
+    contract = _get_owned_contract(contract_id)
     db = get_db()
     with db.cursor() as cur:
+        cur.execute("SELECT storage_path FROM contract_files WHERE contract_id = %s", (contract_id,))
+        file_paths = [row["storage_path"] for row in cur.fetchall()]
         cur.execute("DELETE FROM contracts WHERE id = %s", (contract_id,))
     db.commit()
+    for path in file_paths:
+        storage_delete(path)
     return redirect(url_for("contracts_list"))
+
+
+# ---------- contract files (수행실적 서류) ----------
+
+@app.route("/contracts/<int:contract_id>/files", methods=["POST"])
+@login_required
+def contract_file_upload(contract_id):
+    _get_owned_contract(contract_id)
+
+    doc_type = request.form.get("doc_type", "").strip()
+    upload = request.files.get("file")
+
+    if doc_type not in DOC_TYPES or not upload or not upload.filename:
+        abort(400)
+
+    original_name = upload.filename
+    content_type = upload.mimetype or mimetypes.guess_type(original_name)[0] or "application/octet-stream"
+    # Keep the real (possibly Korean) filename only in the DB for display; the storage
+    # object key must stay ASCII-safe. secure_filename() drops non-ASCII text entirely
+    # (and can even swallow the dot for an all-Korean name), so pull the extension from
+    # the original name directly instead of routing it through secure_filename().
+    raw_ext = os.path.splitext(original_name)[1]
+    safe_ext = "".join(ch for ch in raw_ext if ch.isalnum() or ch == ".")[:10]
+    storage_path = f"{contract_id}/{uuid.uuid4().hex}{safe_ext}"
+
+    storage_upload(storage_path, upload.read(), content_type)
+
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO contract_files (contract_id, doc_type, file_name, storage_path, mime_type, uploaded_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (contract_id, doc_type, original_name, storage_path, content_type, session["user_id"]),
+        )
+    db.commit()
+    return redirect(url_for("contract_edit", contract_id=contract_id))
+
+
+def _get_owned_file(contract_id, file_id):
+    contract = _get_owned_contract(contract_id)
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute("SELECT * FROM contract_files WHERE id = %s AND contract_id = %s", (file_id, contract_id))
+        file_row = cur.fetchone()
+    if not file_row:
+        abort(404)
+    return contract, file_row
+
+
+@app.route("/contracts/<int:contract_id>/files/<int:file_id>")
+@login_required
+def contract_file_download(contract_id, file_id):
+    _, file_row = _get_owned_file(contract_id, file_id)
+    data = storage_download(file_row["storage_path"])
+    filename = file_row["file_name"]
+    ascii_fallback = filename.encode("ascii", "ignore").decode("ascii") or "download"
+    disposition = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(filename)}"
+    return Response(
+        data,
+        mimetype=file_row["mime_type"] or "application/octet-stream",
+        headers={"Content-Disposition": disposition},
+    )
+
+
+@app.route("/contracts/<int:contract_id>/files/<int:file_id>/delete", methods=["POST"])
+@login_required
+def contract_file_delete(contract_id, file_id):
+    _, file_row = _get_owned_file(contract_id, file_id)
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute("DELETE FROM contract_files WHERE id = %s", (file_id,))
+    db.commit()
+    storage_delete(file_row["storage_path"])
+    return redirect(url_for("contract_edit", contract_id=contract_id))
 
 
 # ---------- admin: users & targets ----------
