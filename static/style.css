@@ -394,10 +394,12 @@ td.empty {
 .field-row {
     display: flex;
     gap: 14px;
+    flex-wrap: wrap;
 }
 
 .field-row label {
     flex: 1;
+    min-width: 160px;
 }
 
 .field-hint {

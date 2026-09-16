@@ -10,7 +10,7 @@
     <p class="error">{{ error }}</p>
     {% endif %}
 
-    <form method="post" class="stack-form">
+    <form method="post" class="stack-form" enctype="multipart/form-data">
         <label>계약명
             <input type="text" name="title" value="{{ contract.title if contract else '' }}" required>
         </label>
@@ -35,6 +35,20 @@
                 {% endfor %}
             </select>
         </label>
+        {% if not contract %}
+        <div class="field-row">
+            <label>계약서 첨부
+                <input type="file" name="file_contract" multiple>
+            </label>
+            <label>세금계산서 첨부
+                <input type="file" name="file_invoice" multiple>
+            </label>
+            <label>기타 서류 첨부
+                <input type="file" name="file_other" multiple>
+            </label>
+        </div>
+        <p class="field-hint">여러 건을 한 번에 선택할 수 있습니다 (예: 월별 세금계산서 여러 장). 등록 후에도 계속 추가할 수 있습니다.</p>
+        {% endif %}
         <div class="form-actions">
             <a href="{{ url_for('contracts_list') }}" class="secondary-btn">취소</a>
             <button type="submit" class="primary-btn">{{ '저장' if contract else '등록' }}</button>

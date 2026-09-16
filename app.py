@@ -619,6 +619,17 @@ def contract_new():
         )
         new_id = cur.fetchone()["id"]
     db.commit()
+
+    new_contract = _get_owned_contract(new_id)
+    for doc_type, field_name in (
+        ("계약서", "file_contract"),
+        ("세금계산서", "file_invoice"),
+        ("기타", "file_other"),
+    ):
+        for upload in request.files.getlist(field_name):
+            if upload and upload.filename:
+                _save_contract_file(new_contract, doc_type, upload)
+
     return redirect(url_for("contract_edit", contract_id=new_id))
 
 
