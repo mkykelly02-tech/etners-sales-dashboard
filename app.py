@@ -4,6 +4,7 @@ import mimetypes
 import os
 import re
 import uuid
+import zipfile
 from datetime import date
 from functools import wraps
 from io import BytesIO
@@ -801,6 +802,44 @@ def contract_file_download(contract_id, file_id):
     )
 
 
+@app.route("/contracts/<int:contract_id>/files/download-all")
+@login_required
+def contract_files_download_all(contract_id):
+    contract = _get_owned_contract(contract_id)
+    db = get_db()
+    with db.cursor() as cur:
+        cur.execute(
+            "SELECT * FROM contract_files WHERE contract_id = %s ORDER BY uploaded_at", (contract_id,)
+        )
+        files = cur.fetchall()
+    if not files:
+        abort(404)
+
+    buf = BytesIO()
+    used_names = {}
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in files:
+            name = f["file_name"]
+            if name in used_names:
+                used_names[name] += 1
+                stem, dot, ext = name.rpartition(".")
+                name = f"{stem}({used_names[name]}).{ext}" if dot else f"{name}({used_names[name]})"
+            else:
+                used_names[name] = 0
+            data = storage_download(f["storage_path"])
+            zf.writestr(name, data)
+    buf.seek(0)
+
+    zip_filename = f"{contract['title']}_서류.zip"
+    ascii_fallback = zip_filename.encode("ascii", "ignore").decode("ascii") or "documents.zip"
+    disposition = f"attachment; filename=\"{ascii_fallback}\"; filename*=UTF-8''{quote(zip_filename)}"
+    return Response(
+        buf.getvalue(),
+        mimetype="application/zip",
+        headers={"Content-Disposition": disposition},
+    )
+
+
 @app.route("/contracts/<int:contract_id>/files/<int:file_id>/delete", methods=["POST"])
 @login_required
 def contract_file_delete(contract_id, file_id):
@@ -915,25 +954,29 @@ def documents():
 @app.route("/clients")
 @login_required
 def clients():
+    q = request.args.get("q", "").strip()
     db = get_db()
     with db.cursor() as cur:
         if session["role"] == "admin":
             cur.execute(
                 """
                 SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
-                FROM contracts GROUP BY client ORDER BY latest DESC
-                """
+                FROM contracts WHERE client ILIKE %s GROUP BY client ORDER BY latest DESC
+                """,
+                (f"%{q}%",),
             )
         else:
             cur.execute(
                 """
                 SELECT client, COUNT(*) AS cnt, SUM(amount)::float AS total, MAX(start_date) AS latest
-                FROM contracts WHERE owner_id = %s GROUP BY client ORDER BY latest DESC
+                FROM contracts WHERE owner_id = %s AND client ILIKE %s GROUP BY client ORDER BY latest DESC
                 """,
-                (session["user_id"],),
+                (session["user_id"], f"%{q}%"),
             )
         client_rows = cur.fetchall()
-    return render_template("clients.html", clients=client_rows, user=current_user_dict())
+    return render_template(
+        "clients.html", clients=client_rows, user=current_user_dict(), filters={"q": q}
+    )
 
 
 # ---------- 리포트 / 엑셀 내보내기 ----------

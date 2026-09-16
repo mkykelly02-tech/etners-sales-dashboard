@@ -44,7 +44,12 @@
 
 {% if contract %}
 <div class="form-card">
-    <h2 class="form-card-title">수행실적 서류</h2>
+    <div class="form-card-head">
+        <h2 class="form-card-title">수행실적 서류</h2>
+        {% if files %}
+        <a href="{{ url_for('contract_files_download_all', contract_id=contract.id) }}" class="secondary-btn">전체 다운로드 (zip)</a>
+        {% endif %}
+    </div>
     <p class="field-hint">계약서, 세금계산서 등을 올려두면 이 계약 건 아래에 자동으로 모아집니다. 나중에 수행실적증명서를 만들 때 여기서 모아 내려받으시면 됩니다.</p>
 
     <form method="post" action="{{ url_for('contract_file_upload', contract_id=contract.id) }}" enctype="multipart/form-data" class="upload-form">

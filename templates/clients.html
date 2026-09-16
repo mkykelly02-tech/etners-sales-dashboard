@@ -6,6 +6,16 @@
     <span class="page-sub">같은 거래처와 맺은 계약들을 모아봅니다</span>
 </div>
 
+<div class="filter-card">
+    <form method="get" class="filter-form">
+        <label>거래처 검색
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="거래처명으로 검색">
+        </label>
+        <button type="submit" class="primary-btn">검색</button>
+        <a href="{{ url_for('clients') }}" class="secondary-btn">초기화</a>
+    </form>
+</div>
+
 <div class="table-card">
     <div class="table-scroll">
         <table>

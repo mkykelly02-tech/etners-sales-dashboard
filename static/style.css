@@ -464,6 +464,19 @@ td.empty {
     margin: 0 0 6px;
 }
 
+.form-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.form-card-head .form-card-title {
+    margin: 0;
+}
+
 .upload-form {
     display: flex;
     gap: 8px;
