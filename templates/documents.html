@@ -42,6 +42,9 @@
 
 <div class="filter-card">
     <form method="get" class="filter-form">
+        <label>계약명 검색
+            <input type="text" name="q" value="{{ filters.q }}" placeholder="계약명으로 검색">
+        </label>
         <label>서류 종류
             <select name="doc_type">
                 <option value="">전체</option>

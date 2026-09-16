@@ -822,6 +822,7 @@ def documents():
     owner_id = request.args.get("owner_id", "")
     date_from = request.args.get("date_from", "")
     date_to = request.args.get("date_to", "")
+    q = request.args.get("q", "").strip()
 
     conditions = []
     params = []
@@ -840,6 +841,9 @@ def documents():
     if date_to:
         conditions.append("c.start_date <= %s")
         params.append(date_to)
+    if q:
+        conditions.append("c.title ILIKE %s")
+        params.append(f"%{q}%")
 
     where_sql = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     db = get_db()
@@ -901,7 +905,7 @@ def documents():
         doc_types=DOC_TYPES,
         owners=owners,
         upload_targets=upload_targets,
-        filters={"doc_type": doc_type, "owner_id": owner_id, "date_from": date_from, "date_to": date_to},
+        filters={"doc_type": doc_type, "owner_id": owner_id, "date_from": date_from, "date_to": date_to, "q": q},
         user=current_user_dict(),
     )
 
